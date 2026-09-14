@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多智能体医疗问答平台</title>
+<style>
+  /* ===== 主题变量：默认深色，可切换浅色 ===== */
+  :root, [data-theme="dark"] {
+    --bg: #0f1419;            /* 页面背景 */
+    --bg-card: #1a2129;       /* 卡片背景 */
+    --bg-inset: #10161d;      /* 内嵌区域背景 */
+    --border: #2a3441;        /* 边框 */
+    --text: #e6edf3;          /* 主文字 */
+    --text-dim: #8b98a5;      /* 次要文字 */
+    --accent: #4a9eff;        /* 主题蓝 */
+    --accent-soft: rgba(74, 158, 255, .14);
+    --green: #3fb950;
+    --green-soft: rgba(63, 185, 80, .13);
+    --orange: #d29922;
+    --orange-soft: rgba(210, 153, 34, .13);
+    --red: #f85149;
+    --red-soft: rgba(248, 81, 73, .13);
+    --shadow: 0 4px 16px rgba(0, 0, 0, .35);
+  }
+  [data-theme="light"] {
+    --bg: #f4f6f9;
+    --bg-card: #ffffff;
+    --bg-inset: #f0f3f7;
+    --border: #dbe2ea;
+    --text: #1f2733;
+    --text-dim: #66788c;
+    --accent: #2b7de0;
+    --accent-soft: rgba(43, 125, 224, .1);
+    --green: #1a9e45;
+    --green-soft: rgba(26, 158, 69, .1);
+    --orange: #b97d0e;
+    --orange-soft: rgba(185, 125, 14, .1);
+    --red: #d93025;
+    --red-soft: rgba(217, 48, 37, .08);
+    --shadow: 0 4px 16px rgba(31, 45, 61, .1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.65;
+    transition: background .25s, color .25s;
+  }
+
+  /* ===== 顶栏 ===== */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  header h1 { font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  header .sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  #themeBtn {
+    border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+    border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px;
+    transition: border-color .2s;
+  }
+  #themeBtn:hover { border-color: var(--accent); }
+
+  /* ===== 布局：左侧智能体面板 + 右侧主区 ===== */
+  .layout {
+    display: grid; grid-template-columns: 252px 1fr; gap: 18px;
+    max-width: 1080px; margin: 0 auto; padding: 18px 24px 48px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .sidebar { position: static; } }
+
+  .sidebar { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 10px; }
+  .sidebar h2 { font-size: 12px; color: var(--text-dim); font-weight: 600; letter-spacing: 1px; margin-bottom: 2px; }
+  .agent {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 11px 12px; transition: border-color .25s, box-shadow .25s;
+  }
+  .agent.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .agent .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background .25s; }
+  .agent.active .dot { background: var(--accent); animation: pulse 1s infinite alternate; }
+  .agent.done .dot { background: var(--green); }
+  @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
+  .agent b { font-size: 13px; display: block; }
+  .agent i { font-style: normal; font-size: 11px; color: var(--text-dim); display: block; }
+  .agent .state { margin-left: auto; font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .agent.active .state { color: var(--accent); }
+  .agent.done .state { color: var(--green); }
+  .spinner {
+    display: inline-block; width: 11px; height: 11px; vertical-align: -1px;
+    border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%;
+    animation: spin .7s linear infinite; margin-right: 4px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tips {
+    background: var(--bg-inset); border: 1px dashed var(--border); border-radius: 12px;
+    padding: 11px 12px; font-size: 11.5px; color: var(--text-dim);
+  }
+  .tips b { color: var(--text); }
+
+  /* ===== 主区 ===== */
+  .content { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
+  }
+  .ask textarea {
+    width: 100%; min-height: 62px; resize: vertical;
+    background: var(--bg-inset); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; font: inherit; outline: none; transition: border-color .2s;
+  }
+  .ask textarea:focus { border-color: var(--accent); }
+  .ask-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); background: var(--bg-inset); color: var(--text-dim);
+    border-radius: 999px; padding: 5px 13px; font-size: 12px; cursor: pointer; transition: all .2s;
+  }
+  .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    padding: 9px 22px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+  }
+  .primary:hover { opacity: .88; }
+  .primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ===== 时间线 ===== */
+  #timeline { display: flex; flex-direction: column; gap: 10px; }
+  .plan-card { border-left: 3px solid var(--accent); }
+  .plan-card h3, .step-card h3 { font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .plan-card ol { margin-left: 20px; display: flex; flex-direction: column; gap: 3px; }
+  .plan-card li { font-size: 13px; color: var(--text); }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 9px;
+    border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+  }
+  .badge.dim { background: var(--bg-inset); color: var(--text-dim); border: 1px solid var(--border); }
+  .round-divider {
+    display: flex; align-items: center; gap: 10px; color: var(--orange);
+    font-size: 12.5px; font-weight: 600; margin: 6px 0 2px;
+  }
+  .round-divider::before, .round-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .step-card.running { border-color: var(--accent); }
+  .step-card .obs { margin-top: 8px; }
+  .step-card details {
+    background: var(--bg-inset); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; margin-top: 6px;
+  }
+  .step-card summary { cursor: pointer; font-size: 12px; color: var(--text-dim); user-select: none; }
+  .step-card pre {
+    margin-top: 6px; white-space: pre-wrap; word-break: break-word;
+    font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 12px; color: var(--text-dim);
+    max-height: 180px; overflow: auto;
+  }
+  .step-card .sub-answer {
+    margin-top: 10px; padding: 9px 12px; border-radius: 8px;
+    background: var(--accent-soft); font-size: 13.5px; white-space: pre-wrap; word-break: break-word;
+  }
+  .step-card .waiting { margin-top: 10px; font-size: 12.5px; color: var(--accent); }
+  .review-bar {
+    border-radius: 10px; padding: 10px 14px; font-size: 13px;
+    border: 1px solid var(--border);
+  }
+  .review-bar.approved { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+  .review-bar.revise { background: var(--orange-soft); border-color: var(--orange); color: var(--orange); }
+  .review-bar .fb { color: var(--text-dim); font-size: 12.5px; margin-top: 3px; white-space: pre-wrap; }
+
+  /* ===== 最终答案 ===== */
+  .final { border: 1px solid var(--green); }
+  .final h3 { font-size: 14px; color: var(--green); margin-bottom: 10px; }
+  .final .answer { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+  .final .meta { margin-top: 12px; font-size: 12px; color: var(--text-dim); }
+  .final .pending { color: var(--accent); font-size: 13px; }
+  .hidden { display: none; }
+
+  /* ===== Toast ===== */
+  #toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-8px);
+    z-index: 99; max-width: min(640px, 92vw);
+    display: flex; flex-direction: column; gap: 8px; opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast-item {
+    background: var(--red-soft); color: var(--red);
+    border: 1px solid var(--red); border-radius: 10px;
+    padding: 10px 16px; font-size: 13px; box-shadow: var(--shadow); white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<header>
+  <div>
+    <h1>🩺 多智能体医疗问答平台</h1>
+    <div class="sub">Planner → Executor → Reviewer 流式协作 · 输出仅供健康参考，不构成医疗建议</div>
+  </div>
+  <button id="themeBtn" type="button">🌙 深色</button>
+</header>
+
+<main class="layout">
+  <!-- 左侧：三角色状态面板 -->
+  <aside class="sidebar">
+    <h2>智能体状态</h2>
+    <div class="agent" id="agent-planner">
+      <span class="dot"></span>
+      <div><b>🧭 规划者</b><i>把问题拆解为执行计划</i></div>
+      <span class="state">待命</span>
+    </div>
+    <div class="agent" id="agent-executor">
+      <span class="dot"></span>
+      <div><b>⚙️ 执行者</b><i>逐步调用工具并生成子答案</i></div>
+      <span class="state">待命</span>
+    </div>
+    <div class="agent" id="agent-reviewer">
+      <span class="dot"></span>
+      <div><b>🔍 审核者</b><i>校验结果，必要时要求修订</i></div>
+      <span class="state">待命</span>
+    </div>
+    <div class="tips">
+      <b>工作流程</b><br>
+      规划者产出分步计划 → 执行者逐步调用工具（搜索 / 计算 / 药品查询）→ 审核者把关，最多修订 2 轮 → 综合定稿并附免责声明。
+    </div>
+  </aside>
+
+  <!-- 右侧：提问 + 过程时间线 + 最终答案 -->
+  <section class="content">
+    <div class="card ask">
+      <textarea id="question" placeholder="请输入您的医疗健康问题，例如药物联用、剂量查询、症状科普…"></textarea>
+      <div class="ask-row">
+        <div class="chips">
+          <button type="button" class="chip" data-q="布洛芬和对乙酰氨基酚能一起吃吗？">布洛芬和对乙酰氨基酚能一起吃吗？</button>
+          <button type="button" class="chip" data-q="成年人每天需要多少毫克的维生素C？">成年人每天需要多少毫克的维生素C？</button>
+        </div>
+        <button type="button" id="askBtn" class="primary">开始提问</button>
+      </div>
+    </div>
+
+    <div id="timeline"></div>
+
+    <div id="finalCard" class="card final hidden">
+      <h3>💡 最终答案</h3>
+      <div class="answer" id="finalAnswer"></div>
+      <div class="meta" id="finalMeta"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ============ 主题切换（记忆到 localStorage） ============ */
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themeBtn.textContent = t === "dark" ? "🌙 深色" : "☀️ 浅色";
+  localStorage.setItem("theme", t);
+}
+applyTheme(localStorage.getItem("theme") || "dark");
+themeBtn.addEventListener("click", () =>
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark")
+);
+
+/* ============ Toast（顶部红色提示） ============ */
+const toastBox = document.getElementById("toast");
+let toastTimer = null;
+function showToast(message) {
+  toastBox.innerHTML = "";
+  const item = document.createElement("div");
+  item.className = "toast-item";
+  item.textContent = message;
+  toastBox.appendChild(item);
+  toastBox.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastBox.classList.remove("show"), 6000);
+}
+
+/* ============ DOM 引用与状态 ============ */
+const askBtn = document.getElementById("askBtn");
+const questionBox = document.getElementById("question");
+const timeline = document.getElementById("timeline");
+const finalCard = document.getElementById("finalCard");
+const finalAnswer = document.getElementById("finalAnswer");
+const finalMeta = document.getElementById("finalMeta");
+
+const ROLE_NAMES = { planner: "planner", executor: "executor", reviewer: "reviewer" };
+const TOOL_NAMES = { web_search: "🌐 联网搜索", calculator: "🧮 计算器", drug_lookup: "💊 药品查询", none: "💬 直接回答" };
+let streaming = false;        // 是否正在进行一次提问
+let stepCards = new Map();    // "round:step" → 步骤卡片元素
+let currentRound = 0;         // 当前执行轮次
+
+function setAgent(role, state, stateText) {
+  const el = document.getElementById("agent-" + (ROLE_NAMES[role] || role));
+  if (!el) return;
+  el.classList.remove("active", "done");
+  if (state) el.classList.add(state);
+  const label = el.querySelector(".state");
+  if (label) label.textContent = stateText;
+}
+function resetAgents() {
+  for (const role of ["planner", "executor", "reviewer"]) setAgent(role, null, "待命");
+}
+function scrollTimeline() {
+  timeline.scrollIntoView({ block: "end" });
+  window.scrollTo({ top: document.body.scrollHeight });
+}
+
+/* ============ 时间线渲染 ============ */
+function addPlanCard(steps) {
+  const card = document.createElement("div");
+  card.className = "card plan-card";
+  const h = document.createElement("h3");
+  h.textContent = "📋 执行计划";
+  card.appendChild(h);
+  const ol = document.createElement("ol");
+  for (const s of steps) {
+    const li = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = TOOL_NAMES[s.tool] || s.tool;
+    li.appendChild(badge);
+    li.appendChild(document.createTextNode(" " + (s.description || "")));
+    ol.appendChild(li);
+  }
+  card.appendChild(ol);
+  timeline.appendChild(card);
+}
+
+function addRoundDivider(round) {
+  const div = document.createElement("div");
+  div.className = "round-divider";
+  div.textContent = `🔁 第 ${round + 1} 轮执行（按审核意见修订）`;
+  timeline.appendChild(div);
+}
+
+/* 建立/更新步骤卡片；data 为 SSE step 事件字段 */
+function upsertStepCard(data) {
+  const key = data.round + ":" + data.step;
+  let card = stepCards.get(key);
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "card step-card";
+    card._obs = document.createElement("div");
+    card._obs.className = "obs";
+    card.appendChild(card._obs);
+    timeline.appendChild(card);
+    stepCards.set(key, card);
+  }
+  const done = data.sub_answer !== null && data.sub_answer !== undefined;
+  card.classList.toggle("running", !done);
+
+  const obs = card._obs;
+  obs.innerHTML = "";
+  const h = document.createElement("h3");
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = TOOL_NAMES[data.tool] || data.tool;
+  h.appendChild(badge);
+  const title = document.createElement("span");
+  title.textContent = ` 第 ${data.step} 步`;
+  h.appendChild(title);
+  obs.appendChild(h);
+
+  // 输入 / 输出折叠区
+  if (data.tool && data.tool !== "none") {
+    if (data.tool_input) {
+      const d1 = document.createElement("details");
+      const s1 = document.createElement("summary");
+      s1.textContent = "工具输入";
+      const p1 = document.createElement("pre");
+      p1.textContent = data.tool_input;
+      d1.appendChild(s1); d1.appendChild(p1);
+      obs.appendChild(d1);
+    }
+    if (data.tool_output) {
+      const d2 = document.createElement("details");
+      const s2 = document.createElement("summary");
+      s2.textContent = "工具输出";
+      const p2 = document.createElement("pre");
+      p2.textContent = data.tool_output;
+      d2.appendChild(s2); d2.appendChild(p2);
+      obs.appendChild(d2);
+    }
+  }
+
+  if (done) {
+    const sub = document.createElement("div");
+    sub.className = "sub-answer";
+    sub.textContent = data.sub_answer;
+    obs.appendChild(sub);
+  } else {
+    const wait = document.createElement("div");
+    wait.className = "waiting";
+    const sp = document.createElement("span");
+    sp.className = "spinner";
+    wait.appendChild(sp);
+    wait.appendChild(document.createTextNode("正在生成子答案…"));
+    obs.appendChild(wait);
+  }
+  scrollTimeline();
+}
+
+function addReviewBar(review) {
+  const bar = document.createElement("div");
+  bar.className = "review-bar " + (review.verdict === "approved" ? "approved" : "revise");
+  const head = document.createElement("b");
+  head.textContent = review.verdict === "approved" ? "✅ 审核通过" : "⚠️ 审核要求修订";
+  bar.appendChild(head);
+  if (review.feedback) {
+    const fb = document.createElement("div");
+    fb.className = "fb";
+    fb.textContent = review.feedback;
+    bar.appendChild(fb);
+  }
+  timeline.appendChild(bar);
+}
+
+function showFinalPending() {
+  finalCard.classList.remove("hidden");
+  finalAnswer.innerHTML = "";
+  const wait = document.createElement("div");
+  wait.className = "pending";
+  const sp = document.createElement("span");
+  sp.className = "spinner";
+  wait.appendChild(sp);
+  wait.appendChild(document.createTextNode("正在综合所有步骤结果生成最终答案…"));
+  finalAnswer.appendChild(wait);
+  finalMeta.textContent = "";
+}
+
+/* ============ SSE 流式请求 ============ */
+function parseBlock(block) {
+  let event = "message";
+  const dataLines = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  let data = {};
+  try { data = JSON.parse(dataLines.join("\n")); } catch { /* 忽略无法解析的数据块 */ }
+  return { event, data };
+}
+
+async function readSSE(resp, onEvent) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      if (block.trim()) onEvent(parseBlock(block));
+    }
+  }
+  if (buffer.trim()) onEvent(parseBlock(buffer));
+}
+
+function handleEvent({ event, data }) {
+  switch (event) {
+    case "agent": {
+      const { role, phase } = data;
+      if (role === "finalizer") {
+        if (phase === "start") { setAgent("reviewer", "done", "已完成"); showFinalPending(); }
+        break;
+      }
+      if (phase === "start") {
+        setAgent(role, "active", "执行中");
+        if (role === "executor" && data.round > 0) { currentRound = data.round; addRoundDivider(data.round); }
+      } else {
+        setAgent(role, "done", "已完成");
+      }
+      break;
+    }
+    case "plan":
+      addPlanCard(data.steps || []);
+      scrollTimeline();
+      break;
+    case "step":
+      upsertStepCard(data);
+      break;
+    case "review":
+      setAgent("reviewer", "active", "执行中");
+      addReviewBar(data);
+      scrollTimeline();
+      break;
+    case "final": {
+      finalAnswer.textContent = data.answer || "";
+      const secs = data.elapsed_ms != null ? (data.elapsed_ms / 1000).toFixed(1) : "?";
+      finalMeta.textContent = `⏱ 耗时 ${secs} 秒 · 🔁 修订 ${data.revisions || 0} 次 · ⚕️ 本答案由 AI 生成，仅供参考`;
+      finishStreaming();
+      break;
+    }
+    case "error":
+      showToast("请求失败：" + (data.message || "未知错误"));
+      finishStreaming();
+      break;
+  }
+}
+
+function finishStreaming() {
+  streaming = false;
+  askBtn.disabled = false;
+  questionBox.disabled = false;
+  for (const role of ["planner", "executor", "reviewer"]) {
+    const el = document.getElementById("agent-" + role);
+    if (el.classList.contains("active")) setAgent(role, "done", "已完成");
+  }
+}
+
+async function ask(question) {
+  question = (question || questionBox.value).trim();
+  if (!question) { showToast("请先输入问题"); return; }
+  if (streaming) return;
+  streaming = true;
+  askBtn.disabled = true;
+  questionBox.disabled = true;
+
+  // 重置界面状态
+  timeline.innerHTML = "";
+  stepCards = new Map();
+  currentRound = 0;
+  finalCard.classList.add("hidden");
+  resetAgents();
+
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const err = await resp.json(); msg = err.detail ? JSON.stringify(err.detail) : msg; } catch { /* 保留状态码信息 */ }
+      throw new Error(msg);
+    }
+    await readSSE(resp, handleEvent);
+  } catch (err) {
+    showToast("请求失败：" + err.message);
+  } finally {
+    finishStreaming();
+  }
+}
+
+askBtn.addEventListener("click", () => ask());
+questionBox.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) ask();
+});
+for (const chip of document.querySelectorAll(".chip")) {
+  chip.addEventListener("click", () => ask(chip.dataset.q));
+}
+</script>
+</body>
+</html>
